@@ -6,6 +6,7 @@ import { defineConfig } from "vitest/config";
 const projectDirectory = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
+  base: process.env.VITE_BASE_PATH ?? "/",
   plugins: [react()],
   build: {
     rollupOptions: {

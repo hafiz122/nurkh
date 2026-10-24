@@ -7,8 +7,17 @@ import { chooseSkill, difficultyFor, nextSeed, recordAttempt, setPreferredSkill 
 import { clearProgress, loadProgress, saveProgress } from "./state/storage";
 import type { Attempt, LocalProgressV1, SkillId, ValidationResult } from "./types";
 
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function siteHref(path: string): string {
+  return `${basePath}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 function currentPath(): "home" | "practice" | "progress" {
-  const path = window.location.pathname.replace(/\/$/, "") || "/";
+  const pathname = basePath && window.location.pathname.startsWith(`${basePath}/`)
+    ? window.location.pathname.slice(basePath.length)
+    : window.location.pathname;
+  const path = pathname.replace(/\/$/, "") || "/";
   if (path === "/practice") return "practice";
   if (path === "/progress") return "progress";
   return "home";
@@ -19,10 +28,10 @@ function SiteShell({ children, route }: { children: React.ReactNode; route: Retu
     <>
       <a className="skip-link" href="#main-content">Skip to content</a>
       <header className="site-header">
-        <a className="wordmark" href="/" aria-label="nurkh home">nurkh.</a>
+        <a className="wordmark" href={siteHref("/")} aria-label="nurkh home">nurkh.</a>
         <nav aria-label="Primary navigation">
-          <a className={route === "practice" ? "active" : ""} href="/practice/">Practice</a>
-          <a className={route === "progress" ? "active" : ""} href="/progress/">Progress</a>
+          <a className={route === "practice" ? "active" : ""} href={siteHref("/practice/")}>Practice</a>
+          <a className={route === "progress" ? "active" : ""} href={siteHref("/progress/")}>Progress</a>
         </nav>
       </header>
       <main id="main-content">{children}</main>
@@ -57,8 +66,8 @@ function HomePage({ progress }: { progress: LocalProgressV1 }) {
           nurkh. gives you one question at a time. Solve it on paper, enter the final answer, and get an exact mathematical check.
         </p>
         <div className="home-actions">
-          <a className="button primary" href="/practice/">{actionLabel}</a>
-          {hasAttempts && <a className="text-link" href="/progress/">Review your progress</a>}
+          <a className="button primary" href={siteHref("/practice/")}>{actionLabel}</a>
+          {hasAttempts && <a className="text-link" href={siteHref("/progress/")}>Review your progress</a>}
         </div>
       </section>
 
@@ -166,7 +175,7 @@ function PracticePage({ progress, updateProgress }: { progress: LocalProgressV1;
   function chooseTopic(skillId: SkillId | null) {
     const next = setPreferredSkill(progress, skillId);
     updateProgress(next);
-    window.location.href = skillId ? `/practice/?topic=${skillId}` : "/practice/";
+    window.location.href = skillId ? siteHref(`/practice/?topic=${skillId}`) : siteHref("/practice/");
   }
 
   return (
@@ -293,7 +302,7 @@ function ProgressPage({ progress, updateProgress }: { progress: LocalProgressV1;
         <section className="progress-empty" aria-labelledby="empty-title">
           <h2 id="empty-title">No answers recorded yet.</h2>
           <p>Complete the first calibration question to start a local progress record.</p>
-          <a className="button primary" href="/practice/">Answer the first question</a>
+          <a className="button primary" href={siteHref("/practice/")}>Answer the first question</a>
         </section>
       ) : (
         <>
@@ -330,7 +339,7 @@ function ProgressPage({ progress, updateProgress }: { progress: LocalProgressV1;
                     <div className="mastery-meter" role="meter" aria-label={`${skill.title}: ${label}`} aria-valuemin={0} aria-valuemax={1} aria-valuenow={score}>
                       <span style={{ width: `${score * 100}%` }} />
                     </div>
-                    <a href={`/practice/?topic=${skill.id}`}>Practice this topic</a>
+                    <a href={siteHref(`/practice/?topic=${skill.id}`)}>Practice this topic</a>
                   </article>
                 );
               })}
