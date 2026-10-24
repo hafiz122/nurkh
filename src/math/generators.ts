@@ -1,0 +1,400 @@
+import { binomial, fraction, linearExpression, polynomialExpression, signedTerm } from "./format";
+import { SeededRandom, stableSeed } from "./rng";
+import { validateAnswer } from "./validator";
+import type { Difficulty, Question, QuestionGenerator, SkillId } from "../types";
+
+const ranges: Record<Difficulty, [number, number]> = {
+  easy: [2, 6],
+  medium: [3, 9],
+  hard: [5, 12]
+};
+
+const validate: QuestionGenerator["validate"] = (question, answer) => validateAnswer(question, answer);
+
+function makeQuestion(
+  skillId: SkillId,
+  seed: number,
+  difficulty: Difficulty,
+  details: Omit<Question, "id" | "seed" | "generatorVersion" | "skillId" | "difficulty">
+): Question {
+  return {
+    id: `${skillId}:${difficulty}:${seed}`,
+    seed,
+    generatorVersion: 1,
+    skillId,
+    difficulty,
+    ...details
+  };
+}
+
+const expressions: QuestionGenerator = {
+  skillId: "expressions",
+  validate,
+  generate(seed, difficulty) {
+    const rng = new SeededRandom(seed);
+    const [min, max] = ranges[difficulty];
+    const a = rng.nonZero(difficulty === "easy" ? 2 : -max, max);
+    const b = rng.nonZero(-max, max);
+    const c = rng.nonZero(difficulty === "easy" ? 1 : -max, max);
+    const d = rng.int(-max, max);
+    const coefficient = a + c;
+    const constant = a * b + d;
+    const inside = b >= 0 ? `x+${b}` : `x-${Math.abs(b)}`;
+    const tail = `${signedTerm(c, "x")}${signedTerm(d)}`;
+
+    return makeQuestion("expressions", seed, difficulty, {
+      promptLatex: `${a}(${inside})${tail}`,
+      instruction: "Simplify the expression.",
+      answer: { latex: linearExpression(coefficient, constant), kind: "expression" },
+      hints: [
+        "Distribute the number outside the parentheses.",
+        "Then collect the x terms and the constant terms separately."
+      ],
+      workedSolution: [
+        `${a}(${inside})${tail}=${a}x${signedTerm(a * b)}${tail}`,
+        `${a}x${signedTerm(c, "x")}=${coefficient}x`,
+        `${signedTerm(a * b).replace(/^\+/, "")}${signedTerm(d)}=${constant}`,
+        `\\boxed{${linearExpression(coefficient, constant)}}`
+      ]
+    });
+  }
+};
+
+const linear: QuestionGenerator = {
+  skillId: "linear",
+  validate,
+  generate(seed, difficulty) {
+    const rng = new SeededRandom(seed);
+    const [, max] = ranges[difficulty];
+
+    if (seed % 2 === 0) {
+      const coefficient = rng.int(2, max);
+      const constant = rng.int(-max, max);
+      const boundaryNumerator = rng.nonZero(-max, max);
+      const rightSide = boundaryNumerator + constant;
+      const boundary = fraction(boundaryNumerator, coefficient);
+      const relation = rng.pick([">", "\\ge"] as const);
+      const open = relation === ">" ? "(" : "[";
+      const interval = `${open}${boundary},\\infty)`;
+
+      return makeQuestion("linear", seed, difficulty, {
+        promptLatex: `${coefficient}x${signedTerm(constant)}${relation}${rightSide}`,
+        instruction: "Solve the inequality. Enter the answer in interval notation.",
+        answer: { latex: interval, kind: "interval" },
+        hints: [
+          "Move the constant term to the other side.",
+          "Divide by the positive coefficient, then write the result as an interval."
+        ],
+        workedSolution: [
+          `${coefficient}x${signedTerm(constant)}${relation}${rightSide}`,
+          `${coefficient}x${relation}${boundaryNumerator}`,
+          `x${relation}${boundary}`,
+          `\\boxed{${interval}}`
+        ]
+      });
+    }
+
+    const solution = rng.nonZero(-max, max);
+    const coefficient = rng.nonZero(difficulty === "easy" ? 2 : -max, max);
+    const constant = rng.int(-max, max);
+    const rightSide = coefficient * solution + constant;
+
+    return makeQuestion("linear", seed, difficulty, {
+      promptLatex: `${coefficient}x${signedTerm(constant)}=${rightSide}`,
+      instruction: "Solve for x.",
+      answer: { latex: `${solution}`, kind: "number" },
+      hints: ["Undo the addition or subtraction first.", "Divide both sides by the coefficient of x."],
+      workedSolution: [
+        `${coefficient}x${signedTerm(constant)}=${rightSide}`,
+        `${coefficient}x=${coefficient * solution}`,
+        `\\boxed{x=${solution}}`
+      ]
+    });
+  }
+};
+
+const linesSystems: QuestionGenerator = {
+  skillId: "lines_systems",
+  validate,
+  generate(seed, difficulty) {
+    const rng = new SeededRandom(seed);
+    const [, max] = ranges[difficulty];
+
+    if (seed % 2 === 0) {
+      const x = rng.nonZero(-max, max);
+      const y = rng.nonZero(-max, max);
+      let a = rng.nonZero(-max, max);
+      let b = rng.nonZero(-max, max);
+      let c = rng.nonZero(-max, max);
+      let d = rng.nonZero(-max, max);
+      while (a * d - b * c === 0) {
+        a = rng.nonZero(-max, max);
+        b = rng.nonZero(-max, max);
+        c = rng.nonZero(-max, max);
+        d = rng.nonZero(-max, max);
+      }
+      const first = a * x + b * y;
+      const second = c * x + d * y;
+
+      return makeQuestion("lines_systems", seed, difficulty, {
+        promptLatex: `\\begin{cases}${a}x${signedTerm(b, "y")}=${first}\\\\${c}x${signedTerm(d, "y")}=${second}\\end{cases}`,
+        instruction: "Solve the system. Enter the answer as (x, y).",
+        answer: { latex: `(${x},${y})`, kind: "ordered_pair" },
+        hints: [
+          "Eliminate one variable by scaling and adding the equations.",
+          "Substitute the value you find into either original equation."
+        ],
+        workedSolution: [
+          `(${d})(${a}x${signedTerm(b, "y")})-(${b})(${c}x${signedTerm(d, "y")})=${d * first - b * second}`,
+          `${a * d - b * c}x=${(a * d - b * c) * x}`,
+          `x=${x},\\quad y=${y}`,
+          `\\boxed{(${x},${y})}`
+        ]
+      });
+    }
+
+    const slope = rng.nonZero(-max, max);
+    const intercept = rng.int(-max, max);
+    const x1 = rng.int(-max, max);
+    const x2 = x1 + rng.int(1, Math.max(2, Math.floor(max / 2)));
+    const y1 = slope * x1 + intercept;
+    const y2 = slope * x2 + intercept;
+
+    return makeQuestion("lines_systems", seed, difficulty, {
+      promptLatex: `(${x1},${y1})\\quad\\text{and}\\quad(${x2},${y2})`,
+      instruction: "Find the line through the two points. Enter an equation for y.",
+      answer: { latex: `y=${linearExpression(slope, intercept)}`, kind: "equation" },
+      hints: ["Find the slope using change in y over change in x.", "Use y = mx + b with either point to find b."],
+      workedSolution: [
+        `m=\\frac{${y2}-${y1}}{${x2}-${x1}}=${slope}`,
+        `${y1}=${slope}(${x1})+b`,
+        `b=${intercept}`,
+        `\\boxed{y=${linearExpression(slope, intercept)}}`
+      ]
+    });
+  }
+};
+
+const exponentsRadicals: QuestionGenerator = {
+  skillId: "exponents_radicals",
+  validate,
+  generate(seed, difficulty) {
+    const rng = new SeededRandom(seed);
+    const [, max] = ranges[difficulty];
+
+    if (seed % 2 === 0) {
+      const outside = rng.int(2, max);
+      const squareFree = rng.pick([2, 3, 5, 6, 7, 10, 11, 13] as const);
+      const radicand = outside * outside * squareFree;
+
+      return makeQuestion("exponents_radicals", seed, difficulty, {
+        promptLatex: `\\sqrt{${radicand}}`,
+        instruction: "Simplify the radical exactly.",
+        answer: { latex: `${outside}\\sqrt{${squareFree}}`, kind: "expression" },
+        hints: ["Look for the largest perfect-square factor.", `Rewrite ${radicand} as a square times ${squareFree}.`],
+        workedSolution: [
+          `\\sqrt{${radicand}}=\\sqrt{${outside * outside}\\cdot${squareFree}}`,
+          `=\\sqrt{${outside * outside}}\\sqrt{${squareFree}}`,
+          `\\boxed{${outside}\\sqrt{${squareFree}}}`
+        ]
+      });
+    }
+
+    const first = rng.int(2, max);
+    const second = rng.int(2, max);
+    const answerPower = first + second;
+
+    return makeQuestion("exponents_radicals", seed, difficulty, {
+      promptLatex: `x^{${first}}\\cdot x^{${second}}`,
+      instruction: "Simplify using exponent laws.",
+      answer: { latex: `x^{${answerPower}}`, kind: "expression" },
+      hints: ["The bases match.", "Add the exponents when multiplying powers with the same base."],
+      workedSolution: [
+        `x^{${first}}\\cdot x^{${second}}=x^{${first}+${second}}`,
+        `\\boxed{x^{${answerPower}}}`
+      ]
+    });
+  }
+};
+
+const polynomials: QuestionGenerator = {
+  skillId: "polynomials",
+  validate,
+  generate(seed, difficulty) {
+    const rng = new SeededRandom(seed);
+    const [, max] = ranges[difficulty];
+    const a = rng.nonZero(-max, max);
+    const b = rng.nonZero(-max, max);
+    const middle = a + b;
+    const constant = a * b;
+
+    return makeQuestion("polynomials", seed, difficulty, {
+      promptLatex: `(x${signedTerm(a)})(x${signedTerm(b)})`,
+      instruction: "Expand and simplify the polynomial.",
+      answer: { latex: polynomialExpression(1, middle, constant), kind: "expression" },
+      hints: ["Multiply each term in the first binomial by each term in the second.", "Combine the two middle x terms."],
+      workedSolution: [
+        `(x${signedTerm(a)})(x${signedTerm(b)})=x^2${signedTerm(b, "x")}${signedTerm(a, "x")}${signedTerm(constant)}`,
+        `\\boxed{${polynomialExpression(1, middle, constant)}}`
+      ]
+    });
+  }
+};
+
+const factoringQuadratics: QuestionGenerator = {
+  skillId: "factoring_quadratics",
+  validate,
+  generate(seed, difficulty) {
+    const rng = new SeededRandom(seed);
+    const [, max] = ranges[difficulty];
+    let firstRoot = rng.nonZero(-max, max);
+    let secondRoot = rng.nonZero(-max, max);
+    while (firstRoot === secondRoot) secondRoot = rng.nonZero(-max, max);
+    const middle = -(firstRoot + secondRoot);
+    const constant = firstRoot * secondRoot;
+    const quadratic = polynomialExpression(1, middle, constant);
+    const factored = `${binomial(firstRoot)}${binomial(secondRoot)}`;
+
+    if (seed % 2 === 0) {
+      return makeQuestion("factoring_quadratics", seed, difficulty, {
+        promptLatex: quadratic,
+        instruction: "Factor the quadratic completely.",
+        answer: { latex: factored, kind: "expression", requiresFactoredForm: true },
+        hints: ["Find two numbers whose product is the constant term.", "Those same numbers must add to the coefficient of x."],
+        workedSolution: [
+          `${firstRoot * secondRoot}=${constant},\\quad -${firstRoot}-${secondRoot}=${middle}`,
+          `\\boxed{${factored}}`
+        ]
+      });
+    }
+
+    const roots = [firstRoot, secondRoot].sort((a, b) => a - b);
+    return makeQuestion("factoring_quadratics", seed, difficulty, {
+      promptLatex: `${quadratic}=0`,
+      instruction: "Solve the quadratic. Enter the roots as (smaller, larger).",
+      answer: { latex: `(${roots[0]},${roots[1]})`, kind: "ordered_pair" },
+      hints: ["Factor the quadratic into two binomials.", "Set each factor equal to zero."],
+      workedSolution: [
+        `${quadratic}=0`,
+        `${factored}=0`,
+        `x=${firstRoot}\\quad\\text{or}\\quad x=${secondRoot}`,
+        `\\boxed{(${roots[0]},${roots[1]})}`
+      ]
+    });
+  }
+};
+
+const rational: QuestionGenerator = {
+  skillId: "rational",
+  validate,
+  generate(seed, difficulty) {
+    const rng = new SeededRandom(seed);
+    const [, max] = ranges[difficulty];
+
+    if (seed % 2 === 0) {
+      let cancelled = rng.nonZero(-max, max);
+      let numeratorRoot = rng.nonZero(-max, max);
+      let denominatorRoot = rng.nonZero(-max, max);
+      while (new Set([cancelled, numeratorRoot, denominatorRoot]).size < 3) {
+        cancelled = rng.nonZero(-max, max);
+        numeratorRoot = rng.nonZero(-max, max);
+        denominatorRoot = rng.nonZero(-max, max);
+      }
+      const cancelledFactor = binomial(cancelled);
+      const expected = `\\frac{${binomial(numeratorRoot)}}{${binomial(denominatorRoot)}}`;
+
+      return makeQuestion("rational", seed, difficulty, {
+        promptLatex: `\\frac{${cancelledFactor}${binomial(numeratorRoot)}}{${cancelledFactor}${binomial(denominatorRoot)}}`,
+        instruction: "Simplify the rational expression.",
+        answer: {
+          latex: expected,
+          kind: "expression",
+          forbiddenFactorLatex: cancelledFactor
+        },
+        hints: ["Factor the numerator and denominator if needed.", "Cancel the common nonzero factor."],
+        workedSolution: [
+          `\\frac{${cancelledFactor}${binomial(numeratorRoot)}}{${cancelledFactor}${binomial(denominatorRoot)}}`,
+          `=\\frac{${binomial(numeratorRoot)}}{${binomial(denominatorRoot)}},\\quad x\\ne${cancelled}`,
+          `\\boxed{${expected}}`
+        ]
+      });
+    }
+
+    const solution = rng.nonZero(-max, max);
+    const shift = rng.nonZero(-max, max);
+    const multiplier = rng.nonZero(2, max);
+    const numerator = multiplier * (solution + shift);
+
+    return makeQuestion("rational", seed, difficulty, {
+      promptLatex: `\\frac{${numerator}}{x${signedTerm(shift)}}=${multiplier}`,
+      instruction: "Solve the rational equation for x.",
+      answer: { latex: `${solution}`, kind: "number" },
+      hints: ["Multiply both sides by the denominator.", "Then isolate x and check that the denominator is not zero."],
+      workedSolution: [
+        `${numerator}=${multiplier}(x${signedTerm(shift)})`,
+        `${numerator}=${multiplier}x${signedTerm(multiplier * shift)}`,
+        `\\boxed{x=${solution}}`
+      ]
+    });
+  }
+};
+
+const functions: QuestionGenerator = {
+  skillId: "functions",
+  validate,
+  generate(seed, difficulty) {
+    const rng = new SeededRandom(seed);
+    const [, max] = ranges[difficulty];
+    const a = rng.nonZero(-max, max);
+    const b = rng.int(-max, max);
+
+    if (seed % 2 === 0) {
+      const c = rng.int(-max, max);
+      const input = rng.nonZero(-Math.min(5, max), Math.min(5, max));
+      const inner = input * input + c;
+      const result = a * inner + b;
+
+      return makeQuestion("functions", seed, difficulty, {
+        promptLatex: `f(x)=${linearExpression(a, b)},\\quad g(x)=x^2${signedTerm(c)},\\quad (f\\circ g)(${input})`,
+        instruction: "Evaluate the composition.",
+        answer: { latex: `${result}`, kind: "number" },
+        hints: ["Evaluate g at the given input first.", "Use that result as the input to f."],
+        workedSolution: [
+          `g(${input})=${input}^2${signedTerm(c)}=${inner}`,
+          `f(${inner})=${a}(${inner})${signedTerm(b)}=${result}`,
+          `\\boxed{${result}}`
+        ]
+      });
+    }
+
+    const output = rng.nonZero(-max * 2, max * 2);
+    const inverseValue = fraction(output - b, a);
+    return makeQuestion("functions", seed, difficulty, {
+      promptLatex: `f(x)=${linearExpression(a, b)},\\quad f^{-1}(${output})`,
+      instruction: "Evaluate the inverse function.",
+      answer: { latex: inverseValue, kind: "number" },
+      hints: ["Set f(x) equal to the given output.", "Solve the resulting linear equation for x."],
+      workedSolution: [
+        `${linearExpression(a, b)}=${output}`,
+        `${a}x=${output - b}`,
+        `\\boxed{f^{-1}(${output})=${inverseValue}}`
+      ]
+    });
+  }
+};
+
+export const generators: Record<SkillId, QuestionGenerator> = {
+  expressions,
+  linear,
+  lines_systems: linesSystems,
+  exponents_radicals: exponentsRadicals,
+  polynomials,
+  factoring_quadratics: factoringQuadratics,
+  rational,
+  functions
+};
+
+export function generateQuestion(skillId: SkillId, seed: number, difficulty: Difficulty): Question {
+  return generators[skillId].generate(stableSeed(seed), difficulty);
+}
+
