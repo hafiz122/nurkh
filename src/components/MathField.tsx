@@ -28,10 +28,10 @@ export function MathAnswerInput({ value, onChange, onSubmit, disabled = false, l
     if (!host) return;
     const field = new MathfieldElement({
       mathVirtualKeyboardPolicy: "auto",
-      smartFence: true,
-      smartMode: true,
       defaultMode: "math"
     });
+    field.smartFence = true;
+    field.smartMode = true;
     field.setAttribute("aria-label", label);
     field.setAttribute("placeholder", "Enter your final answer");
     field.className = "math-answer-field";
