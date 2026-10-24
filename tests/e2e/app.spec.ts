@@ -43,6 +43,24 @@ test("completes the paper-first retry, solution, and progress flow", async ({ pa
   await expect(page.getByRole("heading", { name: "Your algebra record" })).toBeVisible();
 });
 
+test("renders the answer placeholder as spaced, upright text", async ({ page }) => {
+  await page.goto("/practice/");
+  const placeholder = await page.locator("math-field.math-answer-field").evaluate((element) => {
+    const text = element.shadowRoot?.querySelector(".ML__text");
+    return {
+      latex: element.getAttribute("placeholder"),
+      text: text?.textContent,
+      fontStyle: text ? getComputedStyle(text).fontStyle : null
+    };
+  });
+
+  expect(placeholder).toEqual({
+    latex: "\\text{Enter your final answer}",
+    text: "Enter your final answer",
+    fontStyle: "normal"
+  });
+});
+
 test("keeps accepted feedback with the current question until next", async ({ page }) => {
   const seed = 12_345;
   const answer = generateQuestion("expressions", seed, "easy").answer.latex;

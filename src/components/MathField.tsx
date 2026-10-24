@@ -33,7 +33,7 @@ export function MathAnswerInput({ value, onChange, onSubmit, disabled = false, l
     field.smartFence = true;
     field.smartMode = true;
     field.setAttribute("aria-label", label);
-    field.setAttribute("placeholder", "Enter your final answer");
+    field.setAttribute("placeholder", "\\text{Enter your final answer}");
     field.className = "math-answer-field";
     field.value = value;
 
