@@ -45,12 +45,14 @@ export function MathAnswerInput({ value, onChange, onSubmit, disabled = false, l
       }
     };
     field.addEventListener("input", handleInput);
+    field.addEventListener("change", handleInput);
     field.addEventListener("keydown", handleKeyDown, true);
     host.append(field);
     fieldRef.current = field;
 
     return () => {
       field.removeEventListener("input", handleInput);
+      field.removeEventListener("change", handleInput);
       field.removeEventListener("keydown", handleKeyDown, true);
       field.remove();
       fieldRef.current = null;

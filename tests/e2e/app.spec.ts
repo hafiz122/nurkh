@@ -106,6 +106,27 @@ test("recognizes interval brackets typed into MathLive", async ({ page }) => {
   await expect(page.getByText("Infinity is never included. Use a parenthesis next to infinity.")).toBeVisible();
 });
 
+test("checks the interval MathLive commits through a change event", async ({ page }) => {
+  const seed = 2;
+  const generated = generateQuestion("linear", seed, "easy");
+
+  await page.addInitScript((fixedTime) => {
+    Date.now = () => fixedTime;
+  }, seed);
+  await page.goto("/practice/?topic=linear");
+
+  const field = page.locator("math-field.math-answer-field");
+  await field.evaluate((element, latex) => {
+    const mathField = element as HTMLElement & { value: string };
+    mathField.value = latex;
+    mathField.dispatchEvent(new Event("change", { bubbles: true }));
+  }, generated.answer.latex);
+
+  await expect(page.getByRole("button", { name: "Check answer" })).toBeEnabled();
+  await page.getByRole("button", { name: "Check answer" }).click();
+  await expect(page.getByText("Answer accepted.")).toBeVisible();
+});
+
 test("keeps accepted feedback with the current question until next", async ({ page }) => {
   const seed = 12_345;
   const answer = generateQuestion("expressions", seed, "easy").answer.latex;
