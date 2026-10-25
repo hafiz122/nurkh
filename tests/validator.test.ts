@@ -47,6 +47,15 @@ describe("answer equivalence", () => {
     expect(validateAnswer(interval, "x>2").correct).toBe(false);
   });
 
+  it("accepts mathematically equivalent interval endpoints", () => {
+    const lowerBounded = question("[\\frac{1}{2},\\infty)", "interval");
+    const upperBounded = question("(-\\infty,\\frac{3}{4}]", "interval");
+
+    expect(validateAnswer(lowerBounded, "[0.5,\\infty)").correct).toBe(true);
+    expect(validateAnswer(lowerBounded, "x\\ge0.5").correct).toBe(true);
+    expect(validateAnswer(upperBounded, "x\\le0.75").correct).toBe(true);
+  });
+
   it("requires visible factor structure when factoring is requested", () => {
     const factoring = question("(x-1)(x+2)", "expression", { requiresFactoredForm: true });
     expect(validateAnswer(factoring, "(x+2)(x-1)").correct).toBe(true);

@@ -61,6 +61,35 @@ test("renders the answer placeholder as spaced, upright text", async ({ page }) 
   });
 });
 
+test("accepts a decimal-equivalent interval in the answer field", async ({ page }) => {
+  let seed = 2;
+  let generated = generateQuestion("linear", seed, "easy");
+  let fraction = generated.answer.latex.match(/\\frac\{(-?\d+)\}\{(\d+)\}/);
+  while (!fraction) {
+    seed += 2;
+    generated = generateQuestion("linear", seed, "easy");
+    fraction = generated.answer.latex.match(/\\frac\{(-?\d+)\}\{(\d+)\}/);
+  }
+  const decimal = Number(fraction[1]) / Number(fraction[2]);
+  const openingDelimiter = generated.answer.latex.startsWith("[") ? "[" : "(";
+
+  await page.addInitScript((fixedTime) => {
+    Date.now = () => fixedTime;
+  }, seed);
+  await page.goto("/practice/?topic=linear");
+
+  const field = page.locator("math-field.math-answer-field");
+  const answer = `${openingDelimiter}${decimal},\\infty)`;
+  await field.evaluate((element, latex) => {
+    const mathField = element as HTMLElement & { value: string };
+    mathField.value = latex;
+    mathField.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: latex }));
+  }, answer);
+  await page.getByRole("button", { name: "Check answer" }).click();
+
+  await expect(page.getByText("Answer accepted.")).toBeVisible();
+});
+
 test("keeps accepted feedback with the current question until next", async ({ page }) => {
   const seed = 12_345;
   const answer = generateQuestion("expressions", seed, "easy").answer.latex;

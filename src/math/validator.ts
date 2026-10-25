@@ -108,7 +108,33 @@ function equalEquations(actual: string, expected: string): boolean {
   return samples >= 2;
 }
 
-function normalizeInterval(value: string): string | null {
+interface ParsedInterval {
+  leftDelimiter: "(" | "[";
+  leftEndpoint: string;
+  rightEndpoint: string;
+  rightDelimiter: ")" | "]";
+  normalized: string;
+}
+
+function makeInterval(
+  leftDelimiter: ParsedInterval["leftDelimiter"],
+  leftEndpoint: string,
+  rightEndpoint: string,
+  rightDelimiter: ParsedInterval["rightDelimiter"]
+): ParsedInterval | null {
+  const left = leftEndpoint === "-∞" ? "-∞" : parse(leftEndpoint)?.simplify().latex;
+  const right = rightEndpoint === "∞" ? "∞" : parse(rightEndpoint)?.simplify().latex;
+  if (!left || !right) return null;
+  return {
+    leftDelimiter,
+    leftEndpoint: left,
+    rightEndpoint: right,
+    rightDelimiter,
+    normalized: `${leftDelimiter}${compact(left)},${compact(right)}${rightDelimiter}`
+  };
+}
+
+function parseInterval(value: string): ParsedInterval | null {
   const cleaned = value
     .replace(/\\left|\\right/g, "")
     .replace(/\\infty/g, "∞")
@@ -117,10 +143,12 @@ function normalizeInterval(value: string): string | null {
     .replace(/\+∞/g, "∞");
   const match = cleaned.match(/^([([])(.+),(.+)([)\]])$/);
   if (match) {
-    const left = match[2] === "-∞" ? "-∞" : parse(match[2])?.simplify().latex;
-    const right = match[3] === "∞" ? "∞" : parse(match[3])?.simplify().latex;
-    if (!left || !right) return null;
-    return `${match[1]}${compact(left)},${compact(right)}${match[4]}`;
+    return makeInterval(
+      match[1] as ParsedInterval["leftDelimiter"],
+      match[2],
+      match[3],
+      match[4] as ParsedInterval["rightDelimiter"]
+    );
   }
 
   const relation = parse(value, false);
@@ -135,8 +163,24 @@ function normalizeInterval(value: string): string | null {
   const inclusive = operator === "GreaterEqual" || operator === "LessEqual";
   if (!["Greater", "GreaterEqual", "Less", "LessEqual"].includes(operator)) return null;
   return lowerBounded
-    ? `${inclusive ? "[" : "("}${boundary},∞)`
-    : `(-∞,${boundary}${inclusive ? "]" : ")"}`;
+    ? makeInterval(inclusive ? "[" : "(", boundary, "∞", ")")
+    : makeInterval("(", "-∞", boundary, inclusive ? "]" : ")");
+}
+
+function equalIntervalEndpoints(actual: string, expected: string): boolean {
+  if (actual === "-∞" || actual === "∞" || expected === "-∞" || expected === "∞") {
+    return actual === expected;
+  }
+  return equalExpressions(actual, expected);
+}
+
+function equalIntervals(actual: ParsedInterval, expected: ParsedInterval): boolean {
+  return (
+    actual.leftDelimiter === expected.leftDelimiter &&
+    actual.rightDelimiter === expected.rightDelimiter &&
+    equalIntervalEndpoints(actual.leftEndpoint, expected.leftEndpoint) &&
+    equalIntervalEndpoints(actual.rightEndpoint, expected.rightEndpoint)
+  );
 }
 
 export function isParseableAnswer(question: Question, latex: string): boolean {
@@ -145,7 +189,7 @@ export function isParseableAnswer(question: Question, latex: string): boolean {
     const tuple = splitTuple(latex);
     return Boolean(tuple && parse(tuple[0]) && parse(tuple[1]));
   }
-  if (question.answer.kind === "interval") return normalizeInterval(latex) !== null;
+  if (question.answer.kind === "interval") return parseInterval(latex) !== null;
   return parse(latex) !== null;
 }
 
@@ -169,8 +213,10 @@ export function validateAnswer(question: Question, latex: string): ValidationRes
     correct = equalExpressions(actual[0], expected[0]) && equalExpressions(actual[1], expected[1]);
     normalizedAnswer = `(${parse(actual[0])!.simplify().latex},${parse(actual[1])!.simplify().latex})`;
   } else if (question.answer.kind === "interval") {
-    normalizedAnswer = normalizeInterval(latex)!;
-    correct = normalizedAnswer === normalizeInterval(question.answer.latex);
+    const actualInterval = parseInterval(latex)!;
+    const expectedInterval = parseInterval(question.answer.latex)!;
+    normalizedAnswer = actualInterval.normalized;
+    correct = equalIntervals(actualInterval, expectedInterval);
   } else if (question.answer.kind === "equation") {
     correct = equalEquations(latex, question.answer.latex);
     normalizedAnswer = parse(latex)!.latex;
