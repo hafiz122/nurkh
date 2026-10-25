@@ -90,6 +90,22 @@ test("accepts a decimal-equivalent interval in the answer field", async ({ page 
   await expect(page.getByText("Answer accepted.")).toBeVisible();
 });
 
+test("recognizes interval brackets typed into MathLive", async ({ page }) => {
+  await page.addInitScript(() => {
+    Date.now = () => 2;
+  });
+  await page.goto("/practice/?topic=linear");
+
+  const field = page.locator("math-field.math-answer-field");
+  await field.focus();
+  await field.pressSequentially("[-3,∞]");
+
+  await expect(field).toHaveJSProperty("value", "\\left\\lbrack-3,\\infty\\right\\rbrack");
+  await expect(page.getByRole("button", { name: "Check answer" })).toBeEnabled();
+  await page.getByRole("button", { name: "Check answer" }).click();
+  await expect(page.getByText("Infinity is never included. Use a parenthesis next to infinity.")).toBeVisible();
+});
+
 test("keeps accepted feedback with the current question until next", async ({ page }) => {
   const seed = 12_345;
   const answer = generateQuestion("expressions", seed, "easy").answer.latex;

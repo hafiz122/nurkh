@@ -56,6 +56,23 @@ describe("answer equivalence", () => {
     expect(validateAnswer(upperBounded, "x\\le0.75").correct).toBe(true);
   });
 
+  it("accepts interval brackets serialized by MathLive", () => {
+    const interval = question("[-3,\\infty)", "interval");
+    const result = validateAnswer(interval, "\\left\\lbrack-3,\\infty\\right)");
+
+    expect(result.parseable).toBe(true);
+    expect(result.correct).toBe(true);
+  });
+
+  it("explains that infinity cannot use a closed bracket", () => {
+    const interval = question("[-3,\\infty)", "interval");
+    const result = validateAnswer(interval, "\\left\\lbrack-3,\\infty\\right\\rbrack");
+
+    expect(result.parseable).toBe(true);
+    expect(result.correct).toBe(false);
+    expect(result.feedback).toBe("Infinity is never included. Use a parenthesis next to infinity.");
+  });
+
   it("requires visible factor structure when factoring is requested", () => {
     const factoring = question("(x-1)(x+2)", "expression", { requiresFactoredForm: true });
     expect(validateAnswer(factoring, "(x+2)(x-1)").correct).toBe(true);

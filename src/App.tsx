@@ -225,7 +225,7 @@ function PracticePage({ progress, updateProgress }: { progress: LocalProgressV1;
           />
           <details className="syntax-help">
             <summary>Answer format help</summary>
-            <p>Use the math keyboard for fractions, powers, and roots. Enter ordered pairs as (x, y) and inequalities in interval notation.</p>
+            <p>Use the math keyboard for fractions, powers, and roots. Enter ordered pairs as (x, y) and inequalities in interval notation. Infinity always uses a parenthesis, never a square bracket.</p>
           </details>
         </div>
 

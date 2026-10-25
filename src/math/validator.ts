@@ -137,6 +137,10 @@ function makeInterval(
 function parseInterval(value: string): ParsedInterval | null {
   const cleaned = value
     .replace(/\\left|\\right/g, "")
+    .replace(/\\lbrack/g, "[")
+    .replace(/\\rbrack/g, "]")
+    .replace(/\\lparen/g, "(")
+    .replace(/\\rparen/g, ")")
     .replace(/\\infty/g, "∞")
     .replace(/\\,/g, "")
     .replace(/\s+/g, "")
@@ -216,6 +220,18 @@ export function validateAnswer(question: Question, latex: string): ValidationRes
     const actualInterval = parseInterval(latex)!;
     const expectedInterval = parseInterval(question.answer.latex)!;
     normalizedAnswer = actualInterval.normalized;
+    const closesInfinity =
+      (actualInterval.leftEndpoint === "-∞" && actualInterval.leftDelimiter === "[") ||
+      (actualInterval.rightEndpoint === "∞" && actualInterval.rightDelimiter === "]");
+    if (closesInfinity) {
+      return {
+        parseable: true,
+        correct: false,
+        normalizedAnswer,
+        feedback: "Infinity is never included. Use a parenthesis next to infinity.",
+        retryEligible: true
+      };
+    }
     correct = equalIntervals(actualInterval, expectedInterval);
   } else if (question.answer.kind === "equation") {
     correct = equalEquations(latex, question.answer.latex);
